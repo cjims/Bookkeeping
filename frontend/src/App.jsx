@@ -1,24 +1,28 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
 
-// 🎯 API 函數區塊
-const API_URL = "http://192.168.52.50:3174";
+// 前後端連接API，需一樣Port
+const API_URL = "http://192.168.52.32:50175";
 
+// 拿json全部紀錄資料
 export async function fetchAllRecords() {
     const res = await fetch(`${API_URL}/records`);
     return res.json();
 }
 
+// 拿未結算週次 
 export async function fetchUnarchivedWeeks() {
     const res = await fetch(`${API_URL}/weeks/unarchived`);
     return res.json();
 }
 
+// 拿指定週次 
 export async function fetchRecords(week) {
   const res = await fetch(`${API_URL}/records/${week}`);
   return res.json();
 }
 
+// 新增紀錄
 export async function addRecord(data) {
   const res = await fetch(`${API_URL}/records`, {
     method: "POST",
@@ -28,6 +32,7 @@ export async function addRecord(data) {
   return res.json();
 }
 
+// 更新付款狀況
 export async function updatePaidStatus(recordId, name, paid) {
   const res = await fetch(`${API_URL}/records/${recordId}`, {
     method: "PATCH",
@@ -44,6 +49,7 @@ export async function deleteRecord(recordId) {
   return res.json();
 }
 
+// 結算紀錄
 export async function archiveRecords(week) {
     const res = await fetch(`${API_URL}/records/archive/${week}`, {
         method: "PATCH",
@@ -70,6 +76,8 @@ export default function App() {
   const [buyer, setBuyer] = useState("");
   const [members, setMembers] = useState(["bee", "elsa", "jim", "betty"]); 
   const [selectedMembers, setSelectedMembers] = useState([]);
+
+  // 日期顯示
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -79,21 +87,23 @@ export default function App() {
     nextWeek.setDate(nextWeek.getDate() + 7);
     return nextWeek.toISOString().split('T')[0];
   });
+
   const [showArchive, setShowArchive] = useState(false); 
   const [memberTotals, setMemberTotals] = useState({});
-  const [debtRelations, setDebtRelations] = useState([]); // 🎯 新增：債務關係列表
+  const [debtRelations, setDebtRelations] = useState([]);
 
   const currentWeek = `${startDate} ~ ${endDate}`;
-  const BASE_WEEK_START = new Date("2025-10-20");
+  const BASE_WEEK_START = new Date("2026-02-16");
 
+  // 每周換人
   const getRotation = () => {
     if (!members.length) return "";
     const current = new Date(startDate);
+    // math.floor:向下取整數
     const weekDiff = Math.floor((current - BASE_WEEK_START) / (7 * 24 * 60 * 60 * 1000));
     const index = weekDiff % members.length;
     return members[index];
   };
-
   const rotatingBuyer = getRotation();
 
   const loadUnarchivedWeeks = async () => {
@@ -106,10 +116,10 @@ export default function App() {
   };
 
   const calculateTotals = (allRecords) => {
-    // 建立一個二維債務關係表：debts[債務人][債權人] = 金額
+    // 建立債務表：debts[欠錢][討錢] = 金額
     const debts = {};
     
-    // 收集所有人
+    // 展開陣列 : 所有參與人
     const allPeople = new Set([
       ...members,
       ...allRecords.map(r => r.buyer),
@@ -126,9 +136,8 @@ export default function App() {
       });
     });
 
-    // 計算每筆記錄的債務關係
     allRecords.forEach(record => {
-      if (record.is_archived) return;
+      if (record.is_archived) return; // 結算過的不算
 
       const splitCount = record.split_members.length;
       if (splitCount === 0) return;
@@ -136,48 +145,48 @@ export default function App() {
       const sharedAmount = record.amount / splitCount;
 
       record.split_members.forEach(m => {
-        // 買方自己不欠自己錢
+        // 買方不欠自己錢
         if (m.name === record.buyer) return;
         
-        // 如果已付款，不計入債務
         if (m.paid) return;
 
-        // 記錄：m.name 欠 record.buyer 的錢
+        // m.name欠買方多少
         debts[m.name][record.buyer] += sharedAmount;
       });
     });
 
-    // 互相抵銷債務
     allPeople.forEach(personA => {
       allPeople.forEach(personB => {
-        if (personA >= personB) return; // 只處理一次（A-B 配對）
+        if (personA >= personB) return;
 
-        const aOwesB = debts[personA][personB];
+        // A->B
+        const aOwesB = debts[personA][personB]; 
+        // B->A
         const bOwesA = debts[personB][personA];
 
         if (aOwesB > bOwesA) {
-          // A 欠 B 比較多，抵銷後 A 還欠 B
+          // A欠B
           debts[personA][personB] = aOwesB - bOwesA;
           debts[personB][personA] = 0;
         } else if (bOwesA > aOwesB) {
-          // B 欠 A 比較多，抵銷後 B 還欠 A
+          // B欠A
           debts[personB][personA] = bOwesA - aOwesB;
           debts[personA][personB] = 0;
         } else {
-          // 兩邊相等，全部抵銷
+          // 兩邊相等，相互抵銷
           debts[personA][personB] = 0;
           debts[personB][personA] = 0;
         }
       });
     });
 
-    // 轉換成顯示用的格式（只保留有債務的關係）
+    // 債務表陣列化
     const debtList = [];
     allPeople.forEach(debtor => {
       allPeople.forEach(creditor => {
         if (debtor !== creditor && debts[debtor][creditor] > 0.01) {
           debtList.push({
-            debtor: debtor,
+            debtor: debtor,  
             creditor: creditor,
             amount: debts[debtor][creditor]
           });
@@ -185,17 +194,17 @@ export default function App() {
       });
     });
 
-    // 同時計算每個人的淨額（用於原本的顯示）
+    // 計算每個人的淨額
     const totals = {};
     allPeople.forEach(name => totals[name] = 0);
     
-    // 🎯 修正：基於抵銷後的債務關係計算淨額
+    // 抵銷後的債務計算淨額
     debtList.forEach(debt => {
-      totals[debt.debtor] += debt.amount;   // 欠款者 +
-      totals[debt.creditor] -= debt.amount; // 債權人 -
+      totals[debt.debtor] += debt.amount;   // 欠錢債務變多
+      totals[debt.creditor] -= debt.amount; // 收錢債務變少
     });
 
-    // 移除接近 0 的值
+    // 移除接近0的值(浮點數誤差)
     Object.keys(totals).forEach(name => {
       if (Math.abs(totals[name]) < 0.01) delete totals[name];
     });
@@ -204,11 +213,11 @@ export default function App() {
     console.log("債務清單:", debtList);
 
     setMemberTotals(totals);
-    
-    // 返回債務清單供其他地方使用
+
     return debtList;
   };
 
+  // 讀取當前周次紀錄
   const loadRecords = async () => {
     try {
       const data = await fetchRecords(currentWeek); 
@@ -220,6 +229,7 @@ export default function App() {
     }
   };
   
+  // 所有紀錄
   const loadAllRecords = async () => {
     try {
       const data = await fetchAllRecords();
@@ -228,7 +238,7 @@ export default function App() {
       // 只取未歸檔的紀錄，跨週累計
       const unarchivedRecords = data.filter(r => !r.is_archived);
       const debtList = calculateTotals(unarchivedRecords);
-      setDebtRelations(debtList); // 🎯 儲存債務關係
+      setDebtRelations(debtList);
 
       loadUnarchivedWeeks();
     } catch (error) {
@@ -236,12 +246,14 @@ export default function App() {
     }
   };
 
+  // 這周改變或成員改變都重新計算
   useEffect(() => {
     loadRecords();
     loadAllRecords(); 
     loadUnarchivedWeeks();
   }, [currentWeek, members]); 
 
+  // 新增紀錄
   const handleAddRecord = async () => {
     if (!amount || !buyer) {
       alert("請完整輸入金額與買方！");
@@ -252,10 +264,11 @@ export default function App() {
       return;
     }
 
+    // 回傳新資料
     const newRecord = {
       week: currentWeek, 
       buyer,
-      description: item || "無品項描述",
+      description: item || "未添加品項",
       amount: parseFloat(amount),
       split_members: selectedMembers.map((m) => ({
         name: m,
@@ -265,28 +278,18 @@ export default function App() {
 
     const response = await addRecord(newRecord);
 
+    // 重新載入資料
     if (response.status === "ok") {
       loadRecords();
       loadAllRecords(); 
       setAmount("");
 
-      if (buyer && !members.includes(buyer)) {
-        setMembers((prev) => [...prev, buyer]);
-      }
     } else {
       alert("新增紀錄失敗！");
     }
   };
 
-  const addMember = (newMember) => {
-    if (newMember && !members.includes(newMember)) {
-      setMembers([...members, newMember]);
-      if (!buyer) {
-        setBuyer(newMember);
-      }
-    }
-  };
-
+  // 刪除紀錄(垃圾桶)
   const handleDeleteRecord = async (recordId, description) => {
     if (!window.confirm(`確定要刪除品項 "${description}" 的紀錄嗎？`)) {
       return;
@@ -302,10 +305,12 @@ export default function App() {
     }
   };
 
+  // 更新付款狀態(點人員會變化)
   const handleTogglePaid = async (recordId, memberName, paidStatus) => {
     const updatedPaidStatus = !paidStatus;
 
     try {
+      // 呼叫API更新狀態
       const response = await updatePaidStatus(recordId, memberName, updatedPaidStatus);
       
       if (response.status === "updated") {
@@ -321,6 +326,7 @@ export default function App() {
     }
   };
 
+  // 結算按鈕
   const handleArchiveWeek = async () => {
     if (!window.confirm(`確定要結算並歸檔本週帳單 (${currentWeek}) 嗎？\n\n注意：結算後將無法修改付款狀態。`)) {
       return;
@@ -339,10 +345,11 @@ export default function App() {
     }
   };
 
-  // --- 歷史歸檔計算邏輯 ---
+  // 歷史歸檔
   const archivedWeeks = {};
   const manuallyArchivedRecords = allRecords.filter(r => r.is_archived);
 
+  // 歸檔紀錄統整 (同周一起)
   manuallyArchivedRecords.forEach(r => {
     if (!archivedWeeks[r.week]) {
       archivedWeeks[r.week] = [];
@@ -351,8 +358,10 @@ export default function App() {
   });
   
   const uniqueArchivedWeeks = archivedWeeks;
+  // 檢查本週是否全部付清
   const isCurrentWeekFullyPaid = records.length > 0 && records.every(r => r.split_members.every(m => m.paid));
 
+  // 分兩側顯示，左側輸入，右側總結與紀錄列表
   return (
     <div className="container">
       <div className="left-panel">
@@ -415,11 +424,11 @@ export default function App() {
               共同分帳者：
               <button 
                 type="button"
-                onClick={() => {
+                onClick={() => {  // 全選
                   if (selectedMembers.length === members.length) {
-                    setSelectedMembers([]); // 如果全選了，就取消全選
+                    setSelectedMembers([]);
                   } else {
-                    setSelectedMembers([...members]); // 否則全選
+                    setSelectedMembers([...members]);
                   }
                 }}
                 style={{
@@ -444,9 +453,9 @@ export default function App() {
                     checked={selectedMembers.includes(m)}
                     onChange={() =>
                       setSelectedMembers((prev) =>
-                        prev.includes(m)
-                          ? prev.filter((x) => x !== m)
-                          : [...prev, m]
+                        prev.includes(m)                // 剛點的(m)，是否已經在舊名單裡
+                          ? prev.filter((x) => x !== m) // 有，取消勾選
+                          : [...prev, m]                // 沒有，加入名單
                       )
                     }
                   />
@@ -461,18 +470,6 @@ export default function App() {
           </button>
         </div>
 
-        <div className="add-member">
-          <input
-            type="text"
-            placeholder="輸入新成員名稱後按 Enter"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                addMember(e.target.value.trim());
-                e.target.value = "";
-              }
-            }}
-          />
-        </div>
         <div className="unarchived-weeks-list">
           <h3>📝 待結清的週次</h3>
           {unarchivedWeeks.length === 0 ? (
@@ -507,7 +504,7 @@ export default function App() {
               if (Math.abs(total) < 0.01) return null; 
               
               const displayTotal = Math.abs(total).toFixed(2);
-              const isOwes = total > 0; 
+              const isOwes = total > 0;     // 正數代表未付，負數代表未收
               
               return (
                 <div 
@@ -528,7 +525,7 @@ export default function App() {
             <p className="note" style={{ color: '#008000' }}>✨ 所有帳單目前都已付清！</p>
           )}
           
-          {/* 🎯 新增：詳細債務關係 */}
+          {/* 欠錢渲染 */}
           {debtRelations.length > 0 && (
             <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px dashed #ccc' }}>
               <h4 style={{ fontSize: '1em', color: '#555', marginBottom: '10px' }}>💳 結算明細</h4>
@@ -555,12 +552,15 @@ export default function App() {
         </div>
         <hr />
 
+
         <h2>🗓 {currentWeek} 待結算紀錄</h2>
         
+        { /* 這週有紀錄 */ }
         {records.length > 0 && (
           <button 
             className="add-btn" 
             onClick={handleArchiveWeek}
+            // 全部付清才可點擊
             style={{ backgroundColor: isCurrentWeekFullyPaid ? '#0d47a1' : '#90caf9', cursor: isCurrentWeekFullyPaid ? 'pointer' : 'not-allowed' }}
             disabled={!isCurrentWeekFullyPaid}
           >
@@ -607,6 +607,7 @@ export default function App() {
 
         <button 
           className="archive-toggle-btn"
+          // 切換顯示歷史歸檔
           onClick={() => setShowArchive(!showArchive)}
         >
           {showArchive ? "隱藏歷史歸檔" : "顯示歷史歸檔"} ({Object.keys(uniqueArchivedWeeks).length} 週)

@@ -21,37 +21,37 @@ DB_PATH = "database.db"
 @app.on_event("startup")
 def init_db():
     print(">>> [Startup Event] 正在執行 init_db()...")
+
+    # 初始化資料庫，records表格存在
     try:
         with sqlite3.connect(DB_PATH) as conn:
-            # 確保 records 表格存在
-            conn.execute("""
-CREATE TABLE IF NOT EXISTS records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    week TEXT NOT NULL,
-    buyer TEXT NOT NULL,
-    description TEXT,
-    amount REAL NOT NULL,
-    split_members TEXT,
-    is_archived INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP 
-    -- created_at 欄位用於計算時間，儲存格式如 '2025-10-31 16:00:00'
-)
-""")
-            print(">>> 資料庫初始化完成，records 表格已確保存在。")
             
-            # 刪除超過 30 天的已歸檔紀錄
-            delete_query = """
-            DELETE FROM records 
-            WHERE is_archived = 1 
-              AND created_at < DATETIME('now', '-30 days')
-            """
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    week TEXT NOT NULL,
+                    buyer TEXT NOT NULL,
+                    description TEXT,
+                    amount REAL NOT NULL,
+                    split_members TEXT,
+                    is_archived INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP 
+                    -- created_at用於計算時間，儲存格式 '2025-10-31 16:00:00'
+                )
+                """)
+            print("資料庫初始化完成，records 表格存在")
+            
+            # 刪除超過 30 天的已歸檔紀錄，伺服器重新啟動才會生效
+            delete_query = """DELETE FROM records WHERE is_archived = 1 AND created_at < DATETIME('now', '-30 days')"""
+
             cursor = conn.execute(delete_query)
             conn.commit()
-            print(f">>> 執行清理：已刪除 {cursor.rowcount} 筆超過 30 天的已歸檔紀錄。")
+            print(f"清理：已刪除 {cursor.rowcount} 筆超過 30 天的已歸檔紀錄。")
             
     except Exception as e:
-        print(f"!!! [Startup Error] 初始化資料庫失敗: {e}")
+        print(f"[Startup Error] 初始化資料庫失敗: {e}")
 
+# 定義格式
 class Record(BaseModel):
     week: str 
     buyer: str
@@ -59,37 +59,7 @@ class Record(BaseModel):
     amount: float
     split_members: list[dict]
 
-# 結算週次紀錄
-@app.patch("/records/archive/{week}")
-def archive_records(week: str):
-    with sqlite3.connect(DB_PATH) as conn:
-        # 檢查該週是否所有紀錄都已付款
-        rows = conn.execute("SELECT split_members FROM records WHERE week=?", (week,)).fetchall()
-        
-        if not rows:
-             raise HTTPException(404, detail=f"No records found for week {week}")
-
-        # 檢查所有人是否都已付錢
-        all_paid = True
-        for row in rows:
-            members = json.loads(row[0])
-            for m in members:
-                if not m.get("paid"):
-                    all_paid = False
-                    break
-            if not all_paid:
-                break
-        
-        if not all_paid:
-             raise HTTPException(400, detail="Cannot archive: Not all split members have paid for all records this week.")
-
-
-        # 所有人都付款，該週所有紀錄標記為已歸檔
-        conn.execute("UPDATE records SET is_archived = 1 WHERE week=?", (week,))
-        conn.commit()
-    return {"status": "archived", "week": week}
-
-# 將資料庫row轉換為字典，傳回前端
+# 將資料庫row轉換為dict，傳回給前端
 def record_row_to_dict(r):
     return {
         "id": r[0],
@@ -104,7 +74,7 @@ def record_row_to_dict(r):
 
 # post:新增紀錄
 @app.post("/records")
-def add_record(record: Record):
+def add_record(record : Record):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
             "INSERT INTO records (week, buyer, description, amount, split_members, is_archived) VALUES (?, ?, ?, ?, ?, ?)",
@@ -112,7 +82,7 @@ def add_record(record: Record):
     )
     return {"status": "ok"}
 
-# get:所有紀錄(週次倒序)
+# get:所有歷史紀錄(週次新到舊)
 @app.get("/records")
 def get_all_records():
     with sqlite3.connect(DB_PATH) as conn:
@@ -121,14 +91,14 @@ def get_all_records():
 
 # get:某一週的未結算紀錄
 @app.get("/records/{week}")
-def get_records(week: str):
+def get_records(week):
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute("SELECT * FROM records WHERE week=? AND is_archived = 0", (week,)).fetchall() 
     return [record_row_to_dict(r) for r in rows]
 
 # 刪除紀錄
 @app.delete("/records/{record_id}")
-def delete_record(record_id: int):
+def delete_record(record_id):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.execute("DELETE FROM records WHERE id=?", (record_id,))
         if cursor.rowcount == 0:
@@ -143,17 +113,18 @@ def get_unarchived_weeks():
         rows = conn.execute("SELECT DISTINCT week FROM records WHERE is_archived = 0 ORDER BY week DESC").fetchall()
     return [row[0] for row in rows]
 
-# patch:更新某紀錄的成員付款狀態
+# patch:更新某周紀錄的成員付款狀況
 @app.patch("/records/{record_id}")
-def update_paid_status(record_id: int, data: dict):
+def update_paid_status(record_id, data):
     with sqlite3.connect(DB_PATH) as conn:
         
-        # 獲取is_archived狀態
+        # 獲取成員、is_archived狀態
         row = conn.execute("SELECT split_members, is_archived FROM records WHERE id=?", (record_id,)).fetchone() 
 
         if not row:
             raise HTTPException(404, "Record not found")
         
+        # is_archived = 1
         if row[1] == 1:
              raise HTTPException(400, detail="Cannot change paid status: this record is already archived.")
 
@@ -165,8 +136,40 @@ def update_paid_status(record_id: int, data: dict):
 
         conn.execute("UPDATE records SET split_members=? WHERE id=?", (json.dumps(members), record_id))
 
+        conn.commit()
     return {"status": "updated"}
+
+# 結算週次紀錄
+@app.patch("/records/archive/{week}")
+def archive_records(week):
+    with sqlite3.connect(DB_PATH) as conn:
+        # 取出某週分帳人員名單
+        rows = conn.execute("SELECT split_members FROM records WHERE week=?", (week,)).fetchall()
+        
+        if not rows:
+             raise HTTPException(404, detail=f"No records found for week {week}")
+
+        # 檢查該周所有人是否都已付錢
+        all_paid = True
+        for row in rows:
+            members = json.loads(row[0])
+            for m in members:
+                # 沒付款，跳出
+                if not m.get("paid"):
+                    all_paid = False
+                    break
+            if not all_paid:
+                break
+        
+        if not all_paid:
+             raise HTTPException(400, detail="Cannot archive: Not all split members have paid for all records this week.")
+
+        # 所有人都付款，該週所有紀錄標記為已歸檔
+        conn.execute("UPDATE records SET is_archived = 1 WHERE week=?", (week,))
+        conn.commit()
+
+    return {"status": "archived", "week": week}
 
 if __name__ == "__main__":
 
-    uvicorn.run(app, host="0.0.0.0", port=3174, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=3174)

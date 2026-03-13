@@ -1,4 +1,3 @@
-/* App.css - 最終整合版 (基於您的樣式 + 修正後的總計樣式) */
 
 body {
     margin: 0;
@@ -44,7 +43,7 @@ body {
 }
 .date-field:first-child {
   padding-right: 20px;
-  border-right: 2px solid #ddd;  /* 中間的線 */
+  border-right: 2px solid #ddd;
 }
 
 .date-field:last-child {
@@ -71,14 +70,14 @@ input[type="date"] {
     border: 1px solid #ccc;
     border-radius: 8px;
     width: 100%;
-    box-sizing: border-box; /* 確保 padding 不會增加寬度 */
+    box-sizing: border-box;
 }
 
 input[readonly] {
-    background-color: #e9ecef; /* 淺灰色背景 */
-    border: 1px solid #ced4da; /* 稍微深色的邊框 */
-    cursor: not-allowed; /* 顯示禁止點擊的游標 */
-    color: #6c757d; /* 讓文字顏色變淡 */
+    background-color: #e9ecef;
+    border: 1px solid #ced4da; 
+    cursor: not-allowed; 
+    color: #6c757d;
 }
 
 .add-btn {
@@ -108,7 +107,7 @@ input[readonly] {
     gap: 10px;
 }
 
-/* 新增成員輸入 */
+/* 新增成員 */
 .add-member {
     margin-top: 25px;
 }
@@ -179,7 +178,7 @@ input[readonly] {
     gap: 10px;
 }
 
-/* 已轉帳按鈕 - 綠色 */
+/* 已轉帳按鈕*/
 button.paid {
     background-color: #4caf50;
     color: white;
@@ -201,7 +200,7 @@ button.unpaid {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-/* 🎯 刪除按鈕樣式 */
+/* 刪除按鈕樣式 */
 .delete-btn {
     background: none;
     border: none;
@@ -218,13 +217,13 @@ button.unpaid {
     color: #f44336; /* 紅色 */
 }
 
-/* 🎯 歷史歸檔開關按鈕 */
+/* 歷史歸檔按鈕 */
 .archive-toggle-btn {
     width: 100%;
     padding: 10px;
     margin: 15px 0;
-    background-color: #689f38; /* 深黃綠色/橄欖綠 */
-    color: white; /* 確保文字是白色 */
+    background-color: #689f38; 
+    color: white;
     border: 1px solid #cddc39;
     border-radius: 8px;
     cursor: pointer;
@@ -236,7 +235,7 @@ button.unpaid {
     background-color: #558b2f;
 }
 
-/* 🎯 歷史歸檔區塊樣式 */
+/* 歷史歸檔區塊樣式 */
 .archive-section {
     margin-top: 20px;
     padding: 15px;
@@ -263,9 +262,9 @@ button.unpaid {
     padding: 10px;
     margin-bottom: 10px;
     font-size: 16px;
-    background-color: #f9f9f9; /* 淺灰色背景 */
+    background-color: #f9f9f9;
     box-shadow: none;
-    border-left: 5px solid #cddc39; /* 歸檔標記 */
+    border-left: 5px solid #cddc39;
 }
 
 .archived-record .record-header {
@@ -316,18 +315,15 @@ button.unpaid {
     background-color: #e0f7fa; /* 淺藍色 */
 }
 
-/* 點擊中的週次高亮顯示 */
+
 .unarchived-weeks-list li.active-week {
-    background-color: #00bcd4; /* 深一點的藍色 */
+    background-color: #00bcd4;
     color: white;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 
-/* -------------------------------------- */
-/* 🎯 個人總計區塊樣式 (最終版 - 淨投入/欠款) */
-/* -------------------------------------- */
-
+/* 個人總計區塊樣式 */
 .summary-section {
     padding: 20px;
     margin-bottom: 25px;
@@ -359,13 +355,13 @@ button.unpaid {
     font-size: 1.1em;
     min-width: 140px;
     text-align: center;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1); /* 增加陰影 */
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1); 
     transition: transform 0.2s, box-shadow 0.2s;
-    font-weight: 600; /* 加粗文字 */
+    font-weight: 600; 
 }
 
 .member-total:hover {
-    transform: translateY(-3px); /* 讓 hover 效果更明顯 */
+    transform: translateY(-3px);
     box-shadow: 0 6px 12px rgba(0,0,0,0.2);
 }
 
@@ -381,18 +377,18 @@ button.unpaid {
     font-size: 1.3em;
 }
 
-/* 顏色定義 - 應付出 / 淨欠款 (owes) - 欠款人 (高對比紅色系) */
+/* 應付出 */
 .owes {
-    background-color: #ffebee; /* 淺粉色 */
-    color: #c62828; /* 鮮豔的深紅色文字 */
-    border: 2px solid #ef5350; /* 紅色邊框 */
+    background-color: #ffebee;
+    color: #c62828;
+    border: 2px solid #ef5350;
 }
 
-/* 顏色定義 - 應收回 / 淨投入 (receives) - 買家 (高對比藍色系) */
+/* 應收回 */
 .receives {
-    background-color: #e3f2fd; /* 淺藍色 */
-    color: #1565c0; /* 鮮豔的深藍色文字 */
-    border: 2px solid #42a5f5; /* 藍色邊框 */
+    background-color: #e3f2fd; 
+    color: #1565c0; 
+    border: 2px solid #42a5f5; 
 }
 
 .note {
@@ -404,10 +400,10 @@ button.unpaid {
     text-align: center;
 }
 
-/* 🎯 每週負責人顯示區塊 */
+/* 每週負責人顯示區塊 */
 .header-row {
   display: flex;
-  justify-content: space-between; /* 左右分開 */
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
 }
