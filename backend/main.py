@@ -51,7 +51,6 @@ def init_db():
     except Exception as e:
         print(f"[Startup Error] 初始化資料庫失敗: {e}")
 
-# 定義格式
 class Record(BaseModel):
     week: str 
     buyer: str
