@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import "./App.css";
 
 // 前後端連接API，需一樣Port
-const API_URL = "http://192.168.52.32:50175";
+const API_URL = "http://localhost";
 
 // 拿json全部紀錄資料
 export async function fetchAllRecords() {
