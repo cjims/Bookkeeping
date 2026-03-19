@@ -4,24 +4,6 @@ import "./App.css";
 // 前後端連接API，需一樣Port
 const API_URL = "http://localhost";
 
-// 拿json全部紀錄資料
-export async function fetchAllRecords() {
-    const res = await fetch(`${API_URL}/records`);
-    return res.json();
-}
-
-// 拿未結算週次 
-export async function fetchUnarchivedWeeks() {
-    const res = await fetch(`${API_URL}/weeks/unarchived`);
-    return res.json();
-}
-
-// 拿指定週次 
-export async function fetchRecords(week) {
-  const res = await fetch(`${API_URL}/records/${week}`);
-  return res.json();
-}
-
 // 新增紀錄
 export async function addRecord(data) {
   const res = await fetch(`${API_URL}/records`, {
@@ -32,19 +14,37 @@ export async function addRecord(data) {
   return res.json();
 }
 
-// 更新付款狀況
-export async function updatePaidStatus(recordId, name, paid) {
-  const res = await fetch(`${API_URL}/records/${recordId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, paid }),
-  });
+// 拿json全部紀錄資料
+export async function fetchAllRecords() {
+    const res = await fetch(`${API_URL}/records`);
+    return res.json();
+}
+
+// 拿指定週次 
+export async function fetchRecords(week) {
+  const res = await fetch(`${API_URL}/records/${week}`);
   return res.json();
 }
 
 export async function deleteRecord(recordId) {
   const res = await fetch(`${API_URL}/records/${recordId}`, {
     method: "DELETE",
+  });
+  return res.json();
+}
+
+// 拿未結算週次 
+export async function fetchUnarchivedWeeks() {
+    const res = await fetch(`${API_URL}/weeks/unarchived`);
+    return res.json();
+}
+
+// 更新付款狀況
+export async function updatePaidStatus(recordId, name, paid) {
+  const res = await fetch(`${API_URL}/records/${recordId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, paid }),
   });
   return res.json();
 }
@@ -111,9 +111,45 @@ export default function App() {
       const weeks = await fetchUnarchivedWeeks();
       setUnarchivedWeeks(weeks);
     } catch (error) {
-      console.error("Failed to fetch unarchived weeks:", error);
+      console.error("待結清週次錯誤: ", error);
     }
   };
+
+  // 讀取當前周次紀錄
+  const loadRecords = async () => {
+    try {
+      const data = await fetchRecords(currentWeek); 
+      setRecords(data);
+      return data; 
+    } catch (error) {
+      console.error("當前週次紀錄錯誤:", error);
+      return [];
+    }
+  };
+  
+  // 所有紀錄
+  const loadAllRecords = async () => {
+    try {
+      const data = await fetchAllRecords();
+      setAllRecords(data);
+
+      // 先抓未歸檔的紀錄，然後再做計算，得出債務表
+      const unarchivedRecords = data.filter(r => !r.is_archived);
+      const debtList = calculateTotals(unarchivedRecords);
+      setDebtRelations(debtList);
+
+      loadUnarchivedWeeks();
+    } catch (error) {
+      console.error("所有紀錄錯誤:", error);
+    }
+  };
+
+  // 日期或成員切換都重新載入
+  useEffect(() => {
+    loadRecords();
+    loadAllRecords(); 
+    loadUnarchivedWeeks();
+  }, [currentWeek, members]); 
 
   const calculateTotals = (allRecords) => {
     // 建立債務表：debts[欠錢][討錢] = 金額
@@ -204,9 +240,10 @@ export default function App() {
       totals[debt.creditor] -= debt.amount; // 收錢債務變少
     });
 
-    // 移除接近0的值(浮點數誤差)
+    // 移除付完錢的人
     Object.keys(totals).forEach(name => {
-      if (Math.abs(totals[name]) < 0.01) delete totals[name];
+      if (Math.abs(totals[name]) < 0.01) 
+        delete totals[name];
     });
 
     console.log("最終淨額:", totals);
@@ -216,42 +253,6 @@ export default function App() {
 
     return debtList;
   };
-
-  // 讀取當前周次紀錄
-  const loadRecords = async () => {
-    try {
-      const data = await fetchRecords(currentWeek); 
-      setRecords(data);
-      return data; 
-    } catch (error) {
-      console.error("Failed to fetch current records:", error);
-      return [];
-    }
-  };
-  
-  // 所有紀錄
-  const loadAllRecords = async () => {
-    try {
-      const data = await fetchAllRecords();
-      setAllRecords(data);
-
-      // 只取未歸檔的紀錄，跨週累計
-      const unarchivedRecords = data.filter(r => !r.is_archived);
-      const debtList = calculateTotals(unarchivedRecords);
-      setDebtRelations(debtList);
-
-      loadUnarchivedWeeks();
-    } catch (error) {
-      console.error("Failed to fetch all records:", error);
-    }
-  };
-
-  // 這周改變或成員改變都重新計算
-  useEffect(() => {
-    loadRecords();
-    loadAllRecords(); 
-    loadUnarchivedWeeks();
-  }, [currentWeek, members]); 
 
   // 新增紀錄
   const handleAddRecord = async () => {
@@ -283,7 +284,6 @@ export default function App() {
       loadRecords();
       loadAllRecords(); 
       setAmount("");
-
     } else {
       alert("新增紀錄失敗！");
     }
@@ -338,7 +338,6 @@ export default function App() {
         alert(`週次 ${currentWeek} 成功結算並歸檔！`);
         loadRecords(); 
         loadAllRecords();
-        loadUnarchivedWeeks();
       }
     } catch (error) {
       alert(error.message || "結算失敗，請檢查是否所有紀錄都已付款。");
@@ -349,7 +348,7 @@ export default function App() {
   const archivedWeeks = {};
   const manuallyArchivedRecords = allRecords.filter(r => r.is_archived);
 
-  // 歸檔紀錄統整 (同周一起)
+  // 歸檔紀錄統整
   manuallyArchivedRecords.forEach(r => {
     if (!archivedWeeks[r.week]) {
       archivedWeeks[r.week] = [];
@@ -453,9 +452,9 @@ export default function App() {
                     checked={selectedMembers.includes(m)}
                     onChange={() =>
                       setSelectedMembers((prev) =>
-                        prev.includes(m)                // 剛點的(m)，是否已經在舊名單裡
-                          ? prev.filter((x) => x !== m) // 有，取消勾選
-                          : [...prev, m]                // 沒有，加入名單
+                        prev.includes(m)                // 剛點選的成員有沒有被點選過
+                          ? prev.filter((x) => x !== m) 
+                          : [...prev, m]                
                       )
                     }
                   />

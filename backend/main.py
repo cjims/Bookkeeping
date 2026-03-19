@@ -1,5 +1,3 @@
-# main.py (FastAPI Backend)
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -88,7 +86,7 @@ def get_all_records():
         rows = conn.execute("SELECT * FROM records ORDER BY week DESC").fetchall() 
     return [record_row_to_dict(r) for r in rows] 
 
-# get:某一週的未結算紀錄
+# get:特定一週的未結算紀錄
 @app.get("/records/{week}")
 def get_records(week):
     with sqlite3.connect(DB_PATH) as conn:
@@ -101,42 +99,16 @@ def delete_record(record_id):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.execute("DELETE FROM records WHERE id=?", (record_id,))
         if cursor.rowcount == 0:
-            raise HTTPException(404, "Record not found")
+            raise HTTPException(404, "紀錄不存在")
     return {"status": "deleted"}
 
 # get:所有未結算週
 @app.get("/weeks/unarchived")
 def get_unarchived_weeks():
     with sqlite3.connect(DB_PATH) as conn:
-        # 查詢所有is_archived = 0的紀錄，並分組取得不重複的倒序week
+        # 查詢所有is_archived = 0的紀錄，並取得不重複的倒序week
         rows = conn.execute("SELECT DISTINCT week FROM records WHERE is_archived = 0 ORDER BY week DESC").fetchall()
     return [row[0] for row in rows]
-
-# patch:更新某周紀錄的成員付款狀況
-@app.patch("/records/{record_id}")
-def update_paid_status(record_id, data):
-    with sqlite3.connect(DB_PATH) as conn:
-        
-        # 獲取成員、is_archived狀態
-        row = conn.execute("SELECT split_members, is_archived FROM records WHERE id=?", (record_id,)).fetchone() 
-
-        if not row:
-            raise HTTPException(404, "Record not found")
-        
-        # is_archived = 1
-        if row[1] == 1:
-             raise HTTPException(400, detail="Cannot change paid status: this record is already archived.")
-
-        members = json.loads(row[0])
-
-        for m in members:
-            if m["name"] == data["name"]:
-                m["paid"] = data["paid"]
-
-        conn.execute("UPDATE records SET split_members=? WHERE id=?", (json.dumps(members), record_id))
-
-        conn.commit()
-    return {"status": "updated"}
 
 # 結算週次紀錄
 @app.patch("/records/archive/{week}")
@@ -146,7 +118,7 @@ def archive_records(week):
         rows = conn.execute("SELECT split_members FROM records WHERE week=?", (week,)).fetchall()
         
         if not rows:
-             raise HTTPException(404, detail=f"No records found for week {week}")
+             raise HTTPException(404, detail=f"沒有找到第 {week} 週的紀錄")
 
         # 檢查該周所有人是否都已付錢
         all_paid = True
@@ -161,13 +133,40 @@ def archive_records(week):
                 break
         
         if not all_paid:
-             raise HTTPException(400, detail="Cannot archive: Not all split members have paid for all records this week.")
+             raise HTTPException(400, detail="無法歸檔：尚未全部付款。")
 
         # 所有人都付款，該週所有紀錄標記為已歸檔
         conn.execute("UPDATE records SET is_archived = 1 WHERE week=?", (week,))
         conn.commit()
 
     return {"status": "archived", "week": week}
+
+# patch:更新某周紀錄的成員付款狀況
+@app.patch("/records/{record_id}")
+def update_paid_status(record_id: int, data: dict):
+    with sqlite3.connect(DB_PATH) as conn:
+        
+        # 獲取成員、is_archived狀態
+        row = conn.execute("SELECT split_members, is_archived FROM records WHERE id=?", (record_id,)).fetchone() 
+
+        if not row:
+            raise HTTPException(404, "紀錄不存在")
+        
+        # is_archived = 1
+        if row[1] == 1:
+             raise HTTPException(400, detail="無法更改付款狀態：此紀錄已歸檔。")
+
+        members = json.loads(row[0])
+
+        for m in members:
+            if m["name"] == data["name"]:
+                m["paid"] = data["paid"]
+
+        conn.execute("UPDATE records SET split_members=? WHERE id=?", (json.dumps(members), record_id))
+
+        conn.commit()
+    return {"status": "updated"}
+
 
 if __name__ == "__main__":
 
